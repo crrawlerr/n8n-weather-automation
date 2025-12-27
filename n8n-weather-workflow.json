@@ -1,0 +1,397 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "3ef35731-fcf3-4ca1-a81e-3fc8689ceffb",
+      "name": "Cron Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "14d65a2e-eef6-45c3-8755-aec6ab1c393f",
+              "name": "cities",
+              "value": "Austin, Rochester, Varanasi",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "4cbcac61-4ea7-4684-8e23-422a4a4191c2",
+      "name": "Set Cities"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Expand the configured city list into one item per city\nconst input = items[0].json.cities || '';\nconst cities = input.split(',')\n  .map(c => c.trim())\n  .filter(c => c.length > 0);\n\nif (cities.length === 0) {\n  throw new Error('No cities provided in \"cities\" field.');\n}\n\nreturn cities.map(city => ({\n  json: { city }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "69003a2f-267b-4bb8-999f-94edf4dec36e",
+      "name": "Expand Cities"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.openweathermap.org/data/2.5/weather?q={{ $json.city }}&appid=159b6d14f5e320e11a480471402b9ee0&units=metric",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        624,
+        0
+      ],
+      "id": "5e53a1f3-0254-4673-bc5f-3475368fadc6",
+      "name": "Fetch Weather",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2b17e142-8019-4eb5-9108-fe3d3fadc895",
+              "name": "city",
+              "value": "={{$json[\"name\"]}}",
+              "type": "string"
+            },
+            {
+              "id": "1a190bda-e882-4081-ad7a-b85c82e382a6",
+              "name": "country",
+              "value": "={{$json[\"sys\"][\"country\"]}}",
+              "type": "string"
+            },
+            {
+              "id": "f09608cb-a647-48f6-b7e4-79f303321320",
+              "name": "temp",
+              "value": "={{$json[\"main\"][\"temp\"]}}",
+              "type": "number"
+            },
+            {
+              "id": "acdefa21-b667-4380-a920-267736a9248e",
+              "name": "feels_like",
+              "value": "={{$json[\"main\"][\"feels_like\"]}}",
+              "type": "number"
+            },
+            {
+              "id": "166feb14-b8ff-4816-84cd-2a4089c9116c",
+              "name": "humidity",
+              "value": "={{$json[\"main\"][\"humidity\"]}}",
+              "type": "number"
+            },
+            {
+              "id": "ea753874-dcc0-4444-9cc6-3294c65a2ef1",
+              "name": "wind_speed",
+              "value": "={{$json[\"wind\"][\"speed\"]}}",
+              "type": "number"
+            },
+            {
+              "id": "4d5c70c8-6ec5-4437-847f-1303ee179d7d",
+              "name": "description",
+              "value": "={{$json[\"weather\"][0][\"description\"]}}",
+              "type": "string"
+            },
+            {
+              "id": "1f808c3d-3640-430a-ae2b-ead58771bb9c",
+              "name": "pressure",
+              "value": "={{$json[\"main\"][\"pressure\"]}}",
+              "type": "string"
+            },
+            {
+              "id": "3830de7f-482d-470b-b63a-5ee4c3f8ec23",
+              "name": "visibility",
+              "value": "={{$json[\"visibility\"]}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        832,
+        0
+      ],
+      "id": "5001180c-3fe6-4147-90cc-c23c34fa293c",
+      "name": "Extract Weather Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build a human-readable weather summary and determine the alert type for each city\nreturn items.map(item => {\n  const data = item.json;\n\n  const temp = data.temp;\n  const condition = data.description.toLowerCase();\n\n  let alert_type = \"none\";\n\n  // precipitation alert\n  if (\n    condition.includes(\"rain\") ||\n    condition.includes(\"snow\") ||\n    condition.includes(\"drizzle\") ||\n    condition.includes(\"storm\") ||\n    condition.includes(\"thunder\")\n  ) {\n    alert_type = \"precipitation\";\n  }\n\n  // heat alert\n  if (temp > 32) {\n    alert_type = \"heat\";\n  }\n\n  // frost alert\n  if (temp < 0) {\n    alert_type = \"frost\";\n  }\n\n  const alert_text =\n    alert_type === \"none\"\n      ? \"No weather alerts today.\"\n      : `Alert: ${alert_type.toUpperCase()} conditions expected today.`;\n\n  const summary =\n    `Daily Weather – ${data.city}, ${data.country}\\n` +\n    `- Temp: ${temp} °C (feels like ${data.feels_like} °C)\\n` +\n    `- Humidity: ${data.humidity}%\\n` +\n    `- Wind: ${data.wind_speed} m/s\\n` +\n    `- Conditions: ${data.description}\\n` +\n    `${alert_text}`;\n\n  return {\n    json: {\n      ...data,\n      alert_type,\n      summary,\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        0
+      ],
+      "id": "d9d19baa-a382-4f1f-b9e8-82ee0dc3900f",
+      "name": "Build Summary + Alerts"
+    },
+    {
+      "parameters": {
+        "tableId": "weather_logs",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "=run_at",
+              "fieldValue": "={{new Date().toISOString()}}"
+            },
+            {
+              "fieldId": "=city",
+              "fieldValue": "={{$json[\"city\"]}}"
+            },
+            {
+              "fieldId": "=temperature",
+              "fieldValue": "={{$json[\"temp\"]}}"
+            },
+            {
+              "fieldId": "=temperature_unit",
+              "fieldValue": "\"C\""
+            },
+            {
+              "fieldId": "=condition",
+              "fieldValue": "={{$json[\"description\"]}}"
+            },
+            {
+              "fieldId": "=humidity",
+              "fieldValue": "={{$json[\"humidity\"]}}"
+            },
+            {
+              "fieldId": "=wind_speed",
+              "fieldValue": "={{$json[\"wind_speed\"]}}"
+            },
+            {
+              "fieldId": "=alert_type",
+              "fieldValue": "={{$json[\"alert_type\"]}}"
+            },
+            {
+              "fieldId": "=raw_response",
+              "fieldValue": "={{$json}}"
+            },
+            {
+              "fieldId": "=feels_like",
+              "fieldValue": "={{$json[\"feels_like\"]}}"
+            },
+            {
+              "fieldId": "=pressure",
+              "fieldValue": "={{$json[\"pressure\"]}}"
+            },
+            {
+              "fieldId": "=visibility",
+              "fieldValue": "={{$json[\"visibility\"]}}"
+            },
+            {
+              "fieldId": "=summary",
+              "fieldValue": "={{$json.summary}}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        0
+      ],
+      "id": "634d07c1-d381-439e-a9b6-e449dc2cf8d7",
+      "name": "Supabase Insert",
+      "credentials": {
+        "supabaseApi": {
+          "id": "IYJHfCqVeIv3Q57T",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1488,
+        0
+      ],
+      "id": "e66591c8-3e20-434e-9b82-b2bb35d03c39",
+      "name": "Merge Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all city-level summaries into a single plain-text email body\nconst allItems = items.map(i => i.json);\n\nlet emailBody = `Daily Weather Report\\n\\n`;\n\nfor (const item of allItems) {\n  emailBody += `City: ${item.city}\\n`;\n  emailBody += `Summary: ${item.summary}\\n`;\n  emailBody += `Temperature: ${item.temperature} °C\\n`;\n  emailBody += `Feels Like: ${item.feels_like} °C\\n`;\n  emailBody += `Humidity: ${item.humidity} %\\n`;\n  emailBody += `Wind: ${item.wind_speed} m/s\\n`;\n  emailBody += `Pressure: ${item.pressure} hPa\\n`;\n  emailBody += `Visibility: ${item.visibility} m\\n`;\n  emailBody += `Alert: ${item.alert_type}\\n`;\n  emailBody += `-----------------------------\\n`;\n}\n\nreturn [{\n  json: {\n    emailBody\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1744,
+        0
+      ],
+      "id": "e0f66c22-dcd1-487d-99cb-f7514d34548a",
+      "name": "Build Combined Email"
+    },
+    {
+      "parameters": {
+        "sendTo": "adarshsrivastava575@gmail.com",
+        "subject": "=Daily Weather Report – Combined Summary – {{$now.format(\"DD\")}}",
+        "message": "=<pre style=\"white-space: pre-wrap; font-family: Arial, sans-serif; font-size: 14px;\">\n{{$json.emailBody}}\n</pre>\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1984,
+        0
+      ],
+      "id": "bea91629-dca6-4114-93fa-6e62f9b5ad48",
+      "name": "Send Email",
+      "webhookId": "bffb47df-0ec5-4c01-b72c-831095bfe914",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "WFX4hc2ou9AnRznD",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Cities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Cities": {
+      "main": [
+        [
+          {
+            "node": "Expand Cities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Cities": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weather": {
+      "main": [
+        [
+          {
+            "node": "Extract Weather Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Weather Fields": {
+      "main": [
+        [
+          {
+            "node": "Build Summary + Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Summary + Alerts": {
+      "main": [
+        [
+          {
+            "node": "Supabase Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Insert": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Build Combined Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Combined Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "e3bbb185-d27b-4c08-90d8-a7354f52103b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b1bfae3a39055a8964169172436de73d1356fa43932ba271f483268e262656e7"
+  },
+  "id": "NRxbhZksM2yBg3Vr",
+  "tags": []
+}
