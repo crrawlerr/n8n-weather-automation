@@ -63,6 +63,6 @@ You can run the workflow manually using the “Execute Workflow” button to ver
 
 # Included files
 
-- **n8n-weather-workflow.json** — the exported workflow  
-- **README.md** — this documentation  
-- **workflow-overview.png** — a screenshot of the full workflow structure inside n8n
+- **n8n-weather-workflow.json** - the exported workflow  
+- **README.md** - this documentation  
+- **workflow-overview.png** - a screenshot of the full workflow structure inside n8n
